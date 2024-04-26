@@ -3,99 +3,115 @@ const app = express();
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const session = require('express-session');
+const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
-
+const passport = require('passport');
+require('./passport');
 const PORT = process.env.PORT || 5000;
+let tokens = [];
+let users = [
+    {
+        accountId: "1",
+        ownerFirstName: "John",
+        ownerLastName: "Doe",
+        ownerAddress: "123 Main St",
+        dateCreated: "2024-04-22",
+        paid: true,
+    },
+    {
+        accountId: "2",
+        ownerFirstName: "Jane",
+        ownerLastName: "Doe",
+        ownerAddress: "456 Elm St",
+        dateCreated: "2024-05-12",
+        paid: false,
+    },
+    {
+        accountId: "3",
+        ownerFirstName: "Joe",
+        ownerLastName: "Smith",
+        ownerAddress: "789 Pine St",
+        dateCreated: "2024-06-02",
+        paid: true,
+    },
+];
 
-const users = [];
-const tokens = [];
-
-const hardcodedCredentials = {
-    username: 'user',
-    password: 'password'
-};
-
-// Middleware
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:8000',
+    methods: ['GET', 'POST', 'PUT'],
+    credentials: true
+}));
+app.use(cookieParser())
 app.use(bodyParser.json())
-app.use(session({ secret: 'your_secret_key', resave: false, saveUninitialized: false }));
+app.use(session({
+    secret: 'your_secret_key',
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000
+    },
+    resave: false,
+    saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 function generateToken() {
     return crypto.randomBytes(20).toString('hex');
 }
 
 function isAuthenticated(req, res, next) {
-    const authorizationHeader = req.headers.authorization;
-
-    if (!authorizationHeader) {
-        return res.sendStatus(401);
-    }
-
-    const token = authorizationHeader.split(' ')[1];
-
+    const token = req.cookies.authToken;
     if (!token || !tokens.find(t => t.token === token)) {
         return res.sendStatus(401);
     }
-
     return next();
 }
 
-// Routes
+app.post('/login',  (req, res, next) => {
+    passport.authenticate('local', function(err, user, info) {
+        if (err) { return res.status(500).json({message: "Error in authentication."}); }
+        if (!user) { return res.status(401).json({message: "Invalid username or password."}); }
 
-// Login route
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    if (username === hardcodedCredentials.username && password === hardcodedCredentials.password) {
-        req.session.user = { username };
-        const token = generateToken();
-        tokens.push({ token, user: req.session.user });
-        res.json({ token });
+        req.logIn(user, function(err) {
+            if (err) {
+                return res.status(500).json({message: "Could not log in user."});
+            }
+
+            const token = generateToken();
+            tokens.push({token, user: req.session.user});
+            res.cookie('authToken', token, { maxAge: 24 * 60 * 60 * 1000, httpOnly: true, secure: false, sameSite: 'lax' });
+
+            return res.status(200).json({message: "Login successful.", user: user, token: token});
+        });
+
+    })(req, res, next);
+});
+
+app.get('/logout',(req, res) => {
+    req.logout();
+    res.redirect('/login');
+});
+
+app.get("/account/:accountId", isAuthenticated, (req, res) => {
+    const accountId = req.params.accountId;
+    const user = users.find(user => user.accountId === accountId);
+
+    if (user) {
+        res.json(user);
     } else {
-        res.sendStatus(401);
+        res.status(404).json({ message: "Account not found." });
     }
 });
 
-app.get('/logout', isAuthenticated, (req, res) => {
-    req.session.destroy();
-    res.sendStatus(200);
-});
-
-app.get('/authorize', isAuthenticated, (req, res) => {
-    const token = generateToken();
-    tokens.push({ token, user: req.session.user });
-    res.json({ token });
-});
-
-app.get('/account/:accountId', isAuthenticated, (req, res) => {
+app.put("/account/:accountId", isAuthenticated, (req, res) => {
     const accountId = req.params.accountId;
-
     const userIndex = users.findIndex(user => user.accountId === accountId);
-    if (userIndex !== -1) {
-        const userData = users[userIndex];
-        res.json(userData);
-    } else {
-        const newUserData = {
-            accountId,
-            ownerFirstName: 'John',
-            ownerLastName: 'Doe',
-            ownerAddress: '123 Main St',
-            dateCreated: '2024-04-22',
-            paid: true
-        };
-        users.push(newUserData);
-        res.json(newUserData);
-    }
-});
 
-app.put('/account/:accountId', isAuthenticated, (req, res) => {
-    const accountId = req.params.accountId;
-
-    const userIndex = users.findIndex(user => user.accountId === accountId);
     if (userIndex !== -1) {
         users[userIndex] = { ...users[userIndex], ...req.body };
         res.json(users[userIndex]);
     } else {
-        res.status(404).json({ message: 'User not found' });
+        res.status(404).json({ message: "Account not found." });
     }
 });
 

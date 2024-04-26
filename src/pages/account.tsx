@@ -17,11 +17,15 @@ const Account = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchAccountInfo(accountId, token);
+      const data = await fetchAccountInfo(accountId);
       setAccountInfo(data);
       setOwnerAddress(data.ownerAddress);
     } catch (error) {
       setError(error.message);
+      console.error("Error occurred:", error);
+      if (error.status === 401) {
+        navigate("/login");
+      }
     } finally {
       setLoading(false);
     }
@@ -35,6 +39,10 @@ const Account = () => {
       await handleSearch();
     } catch (error) {
       setError(error.message);
+      console.error("Error occurred:", error);
+      if (error.status === 401) {
+        navigate("/login");
+      }
     } finally {
       setLoading(false);
     }

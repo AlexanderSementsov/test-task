@@ -7,7 +7,8 @@ export const login = async (username, password) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password }),
+            credentials: 'include'
         });
         if (response.ok) {
             const data = await response.json();
@@ -24,17 +25,15 @@ export const login = async (username, password) => {
     }
 };
 
-export const fetchAccountInfo = async (accountId, token) => {
+export const fetchAccountInfo = async (accountId) => {
     try {
         const response = await fetch(`${apiUrl}/account/${accountId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
+            credentials: 'include',
         });
         if (response.ok) {
             return response.json();
         } else {
-            throw new Error('Failed to fetch account information');
+            throw {message: 'Failed to fetch account information', status: response.status};
         }
     } catch (error) {
         console.error('Error:', error);
@@ -42,18 +41,18 @@ export const fetchAccountInfo = async (accountId, token) => {
     }
 };
 
-export const updateAccountInfo = async (accountId, accountData, token) => {
+export const updateAccountInfo = async (accountId, accountData) => {
     try {
         const response = await fetch(`${apiUrl}/account/${accountId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify(accountData)
+            body: JSON.stringify(accountData),
+            credentials: 'include',
         });
         if (!response.ok) {
-            throw new Error('Failed to update account information');
+            throw {message: 'Failed to update account information', status: response.status};
         }
     } catch (error) {
         console.error('Error:', error);
